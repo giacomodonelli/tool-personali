@@ -1,0 +1,440 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<title>Livella</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<meta name="description" content="Livella a bolla per iPhone: piano e verticale, con azzeramento e blocco della lettura.">
+<meta name="theme-color" content="#0b1220">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Livella">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/icon-180.png">
+<link rel="icon" href="icons/icon-192.png">
+<style>
+  :root{
+    --bg:#0b1220;
+    --panel:#121a2a;
+    --line:#26324a;
+    --text:#e8edf7;
+    --muted:#8d9ab4;
+    --ok:#2fd97f;
+    --warn:#f5b73c;
+    --accent:#6ea8ff;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{
+    margin:0;
+    background:radial-gradient(120% 70% at 50% 0%, #16223a 0%, var(--bg) 62%) fixed, var(--bg);
+    color:var(--text);
+    font:500 16px/1.35 -apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",system-ui,sans-serif;
+    -webkit-user-select:none;user-select:none;
+    -webkit-text-size-adjust:100%;
+    overflow:hidden;
+    overscroll-behavior:none;
+    touch-action:manipulation;
+  }
+  #app{
+    height:100vh;height:100dvh;
+    display:flex;flex-direction:column;gap:10px;
+    padding:max(10px,env(safe-area-inset-top)) max(14px,env(safe-area-inset-right)) max(12px,env(safe-area-inset-bottom)) max(14px,env(safe-area-inset-left));
+  }
+  header{display:flex;align-items:center;justify-content:space-between;gap:10px;flex:none}
+  .brand{display:flex;align-items:center;gap:9px;font-weight:700;letter-spacing:.2px}
+  .brand .dot{width:11px;height:11px;border-radius:50%;background:#4b5c7d;transition:background .15s}
+  .seg{display:flex;background:var(--panel);border:1px solid var(--line);border-radius:999px;padding:3px}
+  .seg button{appearance:none;border:0;background:transparent;color:var(--muted);font:600 13px/1 -apple-system,system-ui,sans-serif;padding:8px 12px;border-radius:999px}
+  .seg button[aria-pressed="true"]{background:#22304a;color:var(--text)}
+
+  .stage{flex:1;display:flex;align-items:center;justify-content:center;min-height:0}
+  .stage svg{width:auto;height:100%;max-width:100%;aspect-ratio:1/1;display:block}
+  .hidden{display:none !important}
+
+  .readout{flex:none;display:flex;gap:10px}
+  .cell{flex:1;background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:10px 8px;text-align:center;min-width:0}
+  .cell .lab{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .cell .val{font:700 28px/1.15 ui-rounded,-apple-system,"SF Pro Rounded",system-ui,sans-serif;font-variant-numeric:tabular-nums;margin-top:3px;white-space:nowrap}
+  .cell .val.small{font-size:19px}
+  .cell.is-level .val{color:var(--ok)}
+
+  .controls{flex:none;display:flex;gap:10px}
+  .controls button{flex:1;appearance:none;border:1px solid var(--line);background:var(--panel);color:var(--text);border-radius:16px;padding:13px 6px;font:600 15px/1 -apple-system,system-ui,sans-serif}
+  .controls button:active{background:#1b2840}
+  .controls button[aria-pressed="true"]{border-color:var(--accent);color:var(--accent)}
+  .controls button .sub{display:block;font-size:11px;font-weight:500;color:var(--muted);margin-top:4px}
+  .controls button[aria-pressed="true"] .sub{color:var(--accent);opacity:.85}
+
+  .status{flex:none;min-height:17px;text-align:center;font-size:12px;color:var(--muted)}
+  .status b{color:var(--warn);font-weight:600}
+
+  #gate{position:fixed;inset:0;z-index:10;background:rgba(9,14,24,.97);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;padding:30px 26px calc(30px + env(safe-area-inset-bottom));text-align:center}
+  #gate img{width:96px;height:96px;border-radius:22px}
+  #gate h1{font-size:23px;margin:0}
+  #gate p{margin:0;color:var(--muted);font-size:14px;max-width:32ch}
+  #gate button{appearance:none;border:0;border-radius:999px;padding:16px 30px;background:var(--ok);color:#06240f;font:700 17px/1 -apple-system,system-ui,sans-serif}
+  .tip{font-size:12px;max-width:34ch}
+  .err{color:#ff8484}
+</style>
+</head>
+<body>
+
+<!-- sfumature condivise dalle due viste -->
+<svg aria-hidden="true" style="position:absolute;width:0;height:0;overflow:hidden">
+  <defs>
+    <radialGradient id="vial" cx="50%" cy="38%" r="72%">
+      <stop offset="0%" stop-color="#1b2740"/><stop offset="100%" stop-color="#0d1526"/>
+    </radialGradient>
+    <radialGradient id="bub" cx="36%" cy="32%" r="72%">
+      <stop offset="0%" stop-color="#d9fff0"/><stop offset="55%" stop-color="#7ef0b6"/><stop offset="100%" stop-color="#25c977"/>
+    </radialGradient>
+    <radialGradient id="bubOff" cx="36%" cy="32%" r="72%">
+      <stop offset="0%" stop-color="#f2f6ff"/><stop offset="55%" stop-color="#b9c8e4"/><stop offset="100%" stop-color="#7f93b8"/>
+    </radialGradient>
+  </defs>
+</svg>
+
+<div id="app">
+  <header>
+    <div class="brand"><span class="dot" id="dot"></span> Livella</div>
+    <div class="seg" role="group" aria-label="Modalità">
+      <button id="mAuto" aria-pressed="true">Auto</button>
+      <button id="mFlat" aria-pressed="false">Piano</button>
+      <button id="mWall" aria-pressed="false">Muro</button>
+    </div>
+  </header>
+
+  <div class="stage">
+    <!-- modalità piano: bolla circolare -->
+    <svg id="flatView" viewBox="0 0 300 300" aria-label="Livella a bolla">
+      <circle cx="150" cy="150" r="144" fill="url(#vial)" stroke="#2a3854" stroke-width="3"/>
+      <g stroke="#2b3a56" stroke-width="1.5" fill="none">
+        <circle cx="150" cy="150" r="28.5"/>
+        <circle cx="150" cy="150" r="57"/>
+        <circle cx="150" cy="150" r="85.5"/>
+        <circle cx="150" cy="150" r="114"/>
+      </g>
+      <g stroke="#2b3a56" stroke-width="1.5">
+        <line x1="150" y1="16" x2="150" y2="118"/>
+        <line x1="150" y1="182" x2="150" y2="284"/>
+        <line x1="16" y1="150" x2="118" y2="150"/>
+        <line x1="182" y1="150" x2="284" y2="150"/>
+      </g>
+      <g fill="#61708f" font-size="9" font-family="-apple-system,system-ui,sans-serif" text-anchor="middle">
+        <text x="168" y="97">5°</text>
+        <text x="170" y="40">10°</text>
+      </g>
+      <circle id="bubble" cx="150" cy="150" r="26" fill="url(#bubOff)"/>
+      <circle id="target" cx="150" cy="150" r="31.7" fill="none" stroke="#3d4c6b" stroke-width="2.5"/>
+      <circle cx="150" cy="150" r="144" fill="none" stroke="#000" stroke-opacity=".3" stroke-width="9"/>
+    </svg>
+
+    <!-- modalità muro: scostamento dalla verticale -->
+    <svg id="wallView" viewBox="0 0 300 300" class="hidden" aria-label="Livella verticale">
+      <circle cx="150" cy="150" r="144" fill="url(#vial)" stroke="#2a3854" stroke-width="3"/>
+      <line x1="30" y1="150" x2="270" y2="150" stroke="#2b3a56" stroke-width="1.5" stroke-dasharray="6 7"/>
+      <g id="wallRot">
+        <line id="wallLine" x1="34" y1="150" x2="266" y2="150" stroke="#e8edf7" stroke-width="5" stroke-linecap="round"/>
+        <circle cx="150" cy="150" r="8" fill="#e8edf7"/>
+        <line x1="150" y1="142" x2="150" y2="92" stroke="#e8edf7" stroke-width="3" stroke-linecap="round" opacity=".5"/>
+      </g>
+      <g>
+        <rect x="52" y="218" width="196" height="36" rx="18" fill="#0d1526" stroke="#2b3a56" stroke-width="2"/>
+        <line x1="135" y1="223" x2="135" y2="249" stroke="#3d4c6b" stroke-width="2"/>
+        <line x1="165" y1="223" x2="165" y2="249" stroke="#3d4c6b" stroke-width="2"/>
+        <circle id="wallBubble" cx="150" cy="236" r="13" fill="url(#bubOff)"/>
+      </g>
+      <circle cx="150" cy="150" r="144" fill="none" stroke="#000" stroke-opacity=".3" stroke-width="9"/>
+    </svg>
+  </div>
+
+  <div class="readout">
+    <div class="cell" id="cellA"><div class="lab" id="labA">Sinistra / Destra</div><div class="val" id="valA">–</div></div>
+    <div class="cell" id="cellB"><div class="lab" id="labB">Avanti / Indietro</div><div class="val" id="valB">–</div></div>
+  </div>
+
+  <div class="controls">
+    <button id="btnZero">Azzera<span class="sub" id="zeroSub">calibra sul piano</span></button>
+    <button id="btnHold" aria-pressed="false">Blocca<span class="sub">ferma la lettura</span></button>
+    <button id="btnSound" aria-pressed="false">Suono<span class="sub">bip a livello</span></button>
+  </div>
+
+  <div class="status" id="status"></div>
+</div>
+
+<div id="gate">
+  <img src="icons/icon-192.png" alt="">
+  <h1>Livella</h1>
+  <p>Per misurare l'inclinazione serve l'accesso ai sensori di movimento dell'iPhone.</p>
+  <button id="btnStart">Attiva sensori</button>
+  <p class="tip" id="gateTip">Dal menu Condividi di Safari scegli “Aggiungi a Home”: diventa un'app a tutto schermo e funziona anche offline.</p>
+</div>
+
+<script>
+(function(){
+  'use strict';
+
+  var TOL = 0.5;      // gradi entro cui si considera "in bolla"
+  var PX_DEG = 11.4;  // px del disegno per grado (114 px = 10°)
+  var MAXR = 114;     // corsa massima della bolla
+
+  function el(id){ return document.getElementById(id); }
+  var flatView = el('flatView'), wallView = el('wallView');
+  var bubble = el('bubble'), target = el('target');
+  var wallRot = el('wallRot'), wallLine = el('wallLine'), wallBubble = el('wallBubble');
+  var valA = el('valA'), valB = el('valB'), labA = el('labA'), labB = el('labB');
+  var cellA = el('cellA'), cellB = el('cellB'), statusEl = el('status'), dot = el('dot');
+  var gate = el('gate'), gateTip = el('gateTip');
+
+  var modeBtns = { auto: el('mAuto'), flat: el('mFlat'), wall: el('mWall') };
+  var mode = 'auto';   // auto | flat | wall
+  var view = 'flat';   // vista mostrata in questo momento
+  var hold = false;
+  var sound = localStorage.getItem('livella.sound') === '1';
+  var cal = { roll:0, pitch:0, wall:0 };
+  try { var saved = JSON.parse(localStorage.getItem('livella.cal') || '{}');
+        for (var k in saved) if (typeof saved[k] === 'number') cal[k] = saved[k]; } catch(e){}
+
+  var sRoll = 0, sPitch = 0, sWall = 0, has = false, lastEvent = 0;
+  var wasLevel = false, flashUntil = 0, audioCtx = null, started = false, zeroSubView = null;
+
+  /* ---------- sensori ---------- */
+
+  function onOrient(ev){
+    if (ev.beta === null && ev.gamma === null) return;
+    var b = (ev.beta  || 0) * Math.PI / 180;
+    var g = (ev.gamma || 0) * Math.PI / 180;
+
+    // versore "verso l'alto" espresso negli assi del telefono (x destra, y alto, z fuori dallo schermo)
+    var ux = -Math.cos(b) * Math.sin(g);
+    var uy =  Math.sin(b);
+    var uz =  Math.cos(b) * Math.cos(g);
+
+    // compensa lo schermo ruotato (orizzontale o capovolto)
+    var ang = 0;
+    if (screen.orientation && typeof screen.orientation.angle === 'number') ang = screen.orientation.angle;
+    else if (typeof window.orientation === 'number') ang = window.orientation;
+    if (ang) {
+      var t = ang * Math.PI / 180, c = Math.cos(t), s = Math.sin(t);
+      var nx =  ux * c + uy * s;
+      var ny = -ux * s + uy * c;
+      ux = nx; uy = ny;
+    }
+
+    var roll  = Math.atan2(-ux, uz) * 180 / Math.PI;  // sinistra/destra
+    var pitch = Math.atan2( uy, uz) * 180 / Math.PI;  // avanti/indietro
+    var wall  = Math.atan2( ux, uy) * 180 / Math.PI;  // scostamento dalla verticale
+
+    if (!has) { sRoll = roll; sPitch = pitch; sWall = wall; has = true; }
+    else if (!hold) {
+      sRoll  = smooth(sRoll,  roll);
+      sPitch = smooth(sPitch, pitch);
+      sWall  = smooth(sWall,  unwrap(sWall, wall));
+    }
+
+    lastEvent = Date.now();
+    view = (mode === 'auto') ? (Math.abs(uz) > 0.7 ? 'flat' : 'wall') : mode;
+  }
+
+  // passa-basso adattivo: segue i movimenti ampi, resta fermo sulle micro-vibrazioni
+  function smooth(prev, next){
+    var d = Math.abs(next - prev);
+    var a = Math.min(0.45, Math.max(0.07, 0.07 + d * 0.28));
+    return prev + (next - prev) * a;
+  }
+
+  function unwrap(ref, a){
+    while (a - ref >  180) a -= 360;
+    while (a - ref < -180) a += 360;
+    return a;
+  }
+
+  /* ---------- disegno ---------- */
+
+  function fmt(v){
+    if (Math.abs(v) < 0.05) v = 0;
+    return (v > 0 ? '+' : v < 0 ? '−' : '') + Math.abs(v).toFixed(1) + '°';
+  }
+
+  function say(html){ if (Date.now() > flashUntil) statusEl.innerHTML = html; }
+
+  function render(){
+    requestAnimationFrame(render);
+    if (!has) return;
+    var level;
+
+    if (view === 'flat') {
+      if (flatView.classList.contains('hidden')) { flatView.classList.remove('hidden'); wallView.classList.add('hidden'); }
+
+      var rx = sRoll - cal.roll, ry = sPitch - cal.pitch;
+      var total = Math.sqrt(rx * rx + ry * ry);
+      level = total <= TOL;
+
+      // la bolla sale verso il lato più alto, come in una livella vera
+      var dx = -rx * PX_DEG, dy = -ry * PX_DEG;
+      var len = Math.hypot(dx, dy);
+      if (len > MAXR) { dx = dx / len * MAXR; dy = dy / len * MAXR; }
+      bubble.setAttribute('cx', (150 + dx).toFixed(2));
+      bubble.setAttribute('cy', (150 + dy).toFixed(2));
+      bubble.setAttribute('fill', level ? 'url(#bub)' : 'url(#bubOff)');
+      target.setAttribute('stroke', level ? '#2fd97f' : '#3d4c6b');
+
+      labA.textContent = 'Sinistra / Destra';
+      labB.textContent = 'Avanti / Indietro';
+      valA.textContent = fmt(rx); valA.className = 'val';
+      valB.textContent = fmt(ry); valB.className = 'val';
+      say(level ? 'In bolla · scarto ' + total.toFixed(1) + '°'
+                : 'Inclinazione totale <b>' + total.toFixed(1) + '°</b>');
+    } else {
+      if (wallView.classList.contains('hidden')) { wallView.classList.remove('hidden'); flatView.classList.add('hidden'); }
+
+      var w = sWall - cal.wall;
+      while (w >  180) w -= 360;
+      while (w < -180) w += 360;
+      if (w >  90) w -= 180;   // funziona anche col telefono capovolto o di lato
+      if (w < -90) w += 180;
+      level = Math.abs(w) <= TOL;
+
+      wallRot.setAttribute('transform', 'rotate(' + w.toFixed(2) + ' 150 150)');
+      wallLine.setAttribute('stroke', level ? '#2fd97f' : '#e8edf7');
+      wallBubble.setAttribute('cx', (150 + Math.max(-82, Math.min(82, w * 8))).toFixed(2));
+      wallBubble.setAttribute('fill', level ? 'url(#bub)' : 'url(#bubOff)');
+
+      labA.textContent = 'Fuori piombo';
+      labB.textContent = 'Correzione';
+      valA.textContent = fmt(w); valA.className = 'val';
+      valB.textContent = level ? 'a posto' : (w < 0 ? '↺ a sinistra' : '↻ a destra');
+      valB.className = 'val small';
+      say(level ? 'Perfettamente a piombo'
+                : 'Ruota il telefono di <b>' + Math.abs(w).toFixed(1) + '°</b>');
+    }
+
+    if (zeroSubView !== view) {
+      zeroSubView = view;
+      el('zeroSub').textContent = (view === 'wall') ? 'calibra sul muro' : 'calibra sul piano';
+    }
+
+    cellA.classList.toggle('is-level', level);
+    cellB.classList.toggle('is-level', level);
+    dot.style.background = level ? '#2fd97f' : '#4b5c7d';
+    dot.style.boxShadow = level ? '0 0 12px rgba(47,217,127,.75)' : 'none';
+
+    if (level && !wasLevel && !hold) beep();
+    wasLevel = level;
+
+    if (Date.now() - lastEvent > 3000) say('Nessun dato dai sensori: muovi il telefono o ricarica la pagina.');
+  }
+
+  /* ---------- comandi ---------- */
+
+  function setMode(m){
+    mode = m;
+    for (var k in modeBtns) modeBtns[k].setAttribute('aria-pressed', String(k === m));
+    if (m !== 'auto') view = m;
+  }
+  modeBtns.auto.onclick = function(){ setMode('auto'); };
+  modeBtns.flat.onclick = function(){ setMode('flat'); };
+  modeBtns.wall.onclick = function(){ setMode('wall'); };
+
+  el('btnZero').onclick = function(){
+    if (!has) return;
+    if (view === 'flat') {
+      if (cal.roll || cal.pitch) { cal.roll = 0; cal.pitch = 0; flash('Calibrazione rimossa'); }
+      else { cal.roll = sRoll; cal.pitch = sPitch; flash('Questa superficie è ora lo zero'); }
+    } else {
+      if (cal.wall) { cal.wall = 0; flash('Calibrazione rimossa'); }
+      else { cal.wall = sWall; flash('Questa verticale è ora lo zero'); }
+    }
+    try { localStorage.setItem('livella.cal', JSON.stringify(cal)); } catch(e){}
+  };
+
+  el('btnHold').onclick = function(){
+    hold = !hold;
+    this.setAttribute('aria-pressed', String(hold));
+    flash(hold ? 'Lettura bloccata' : 'Lettura di nuovo attiva');
+  };
+
+  el('btnSound').onclick = function(){
+    sound = !sound;
+    this.setAttribute('aria-pressed', String(sound));
+    try { localStorage.setItem('livella.sound', sound ? '1' : '0'); } catch(e){}
+    if (sound) beep(true);
+  };
+  el('btnSound').setAttribute('aria-pressed', String(sound));
+
+  function flash(msg){
+    statusEl.textContent = msg;
+    flashUntil = Date.now() + 1400;
+  }
+
+  function beep(force){
+    if (!sound && !force) return;
+    try {
+      audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+      var t = audioCtx.currentTime;
+      var o = audioCtx.createOscillator(), g = audioCtx.createGain();
+      o.type = 'sine'; o.frequency.value = 880;
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(0.2, t + 0.012);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.16);
+      o.connect(g); g.connect(audioCtx.destination);
+      o.start(t); o.stop(t + 0.18);
+    } catch(e){}
+    if (navigator.vibrate) { try { navigator.vibrate(12); } catch(e){} }
+  }
+
+  /* ---------- schermo sempre acceso ---------- */
+
+  var wakeLock = null;
+  function keepAwake(){
+    if (!('wakeLock' in navigator) || document.visibilityState !== 'visible') return;
+    navigator.wakeLock.request('screen').then(function(l){
+      wakeLock = l;
+      l.addEventListener('release', function(){ wakeLock = null; });
+    }).catch(function(){});
+  }
+  document.addEventListener('visibilitychange', function(){ if (started && !wakeLock) keepAwake(); });
+
+  /* ---------- avvio: su iOS il permesso va chiesto da un tocco ---------- */
+
+  function listen(){
+    started = true;
+    window.addEventListener('deviceorientation', onOrient, true);
+    gate.classList.add('hidden');
+    keepAwake();
+    setTimeout(function(){
+      if (!has) say('Sensori non disponibili qui: apri questa pagina dall’iPhone.');
+    }, 2000);
+  }
+
+  el('btnStart').onclick = function(){
+    var D = window.DeviceOrientationEvent;
+    if (D && typeof D.requestPermission === 'function') {
+      D.requestPermission().then(function(res){
+        if (res === 'granted') listen();
+        else {
+          gateTip.className = 'tip err';
+          gateTip.textContent = 'Permesso negato. Su iPhone vai in Impostazioni → App → Safari → Movimento e orientamento, attivalo e ricarica la pagina.';
+        }
+      }).catch(function(){
+        gateTip.className = 'tip err';
+        gateTip.textContent = 'Non è stato possibile chiedere il permesso: la pagina deve essere aperta in HTTPS.';
+      });
+    } else {
+      listen();
+    }
+  };
+
+  setMode('auto');
+  requestAnimationFrame(render);
+
+  if ('serviceWorker' in navigator && location.protocol === 'https:') {
+    window.addEventListener('load', function(){ navigator.serviceWorker.register('sw.js').catch(function(){}); });
+  }
+})();
+</script>
+</body>
+</html>
